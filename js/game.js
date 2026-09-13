@@ -157,9 +157,13 @@ class Game {
 
     if (this.remainingKnives <= 0 || this.throwCooldown > 0) return;
 
-    // Launch knife
+    // Launch knife with continuous velocity tracking, blade tip leading position, and motion trail
     this.flyingKnife = {
+      yPrev: this.knifeSpawnY,
       y: this.knifeSpawnY,
+      vy: this.knifeSpeed, // -3600 px/s
+      spinAngle: 0,
+      trail: [],
       skinId: this.selectedSkin
     };
     this.remainingKnives--;
@@ -167,6 +171,11 @@ class Game {
 
     this.updateAmmoIcons();
     window.soundCtrl.playThrow();
+
+    // Mobile tactile feedback on throw
+    if (navigator.vibrate) {
+      try { navigator.vibrate(12); } catch (_) {}
+    }
   }
 
   // --- ROTATION MECHANICS ---
@@ -259,12 +268,31 @@ class Game {
 
     this.updateTargetRotation(dt);
 
-    // Flying Knife Update
+    // Flying Knife Update with Continuous Velocity Calculation & Swept Collision
     if (this.flyingKnife) {
-      this.flyingKnife.y += this.knifeSpeed * dt;
+      this.flyingKnife.yPrev = this.flyingKnife.y;
+      this.flyingKnife.y += this.flyingKnife.vy * dt;
+      this.flyingKnife.spinAngle += 0.08;
 
-      // Check Impact
-      if (this.flyingKnife.y <= this.knifeImpactY) {
+      // Update motion blur trail
+      if (!this.flyingKnife.trail) this.flyingKnife.trail = [];
+      this.flyingKnife.trail.push({ y: this.flyingKnife.y, alpha: 0.6 });
+      if (this.flyingKnife.trail.length > 5) this.flyingKnife.trail.shift();
+      for (const t of this.flyingKnife.trail) t.alpha -= dt * 3.5;
+
+      // Dynamic target center taking recoil and entrance offsets into account
+      const currentTargetY = this.targetBaseY + this.targetRecoilY + this.targetSpawnOffset;
+      const targetSurfaceY = currentTargetY + this.targetRadius;
+
+      // Blade tip leads the knife (half height above center of knife)
+      const halfH = this.knifeHeight / 2;
+      const tipYPrev = this.flyingKnife.yPrev - halfH;
+      const tipYCurrent = this.flyingKnife.y - halfH;
+
+      // Frame-rate independent swept penetration check (eliminates tunneling & intermittent sticking)
+      if (CollisionEngine.checkSweptPenetration(tipYPrev, tipYCurrent, targetSurfaceY, 35)) {
+        // Clamp knife position to target rim for exact visual embed
+        this.flyingKnife.y = targetSurfaceY + halfH - 35;
         this.resolveKnifeImpact();
       }
     }
@@ -299,6 +327,11 @@ class Game {
       this.triggerScreenShake(20);
       this.freezeFrameTime = 0.04; // 40ms freeze
 
+      // Deflection haptics
+      if (navigator.vibrate) {
+        try { navigator.vibrate([40, 60, 40]); } catch (_) {}
+      }
+
       // Trigger Game Over after knife tumbles
       this.currentState = this.STATE.GAME_OVER;
       setTimeout(() => this.showGameOver(result.reason), 650);
@@ -308,9 +341,14 @@ class Game {
       const embedAngle = result.impactAngle;
       this.embeddedKnives.push({
         angle: embedAngle,
-        skinId: this.flyingKnife.skinId
+        skinId: this.flyingKnife ? this.flyingKnife.skinId : this.selectedSkin
       });
       this.flyingKnife = null;
+
+      // Stick haptic
+      if (navigator.vibrate) {
+        try { navigator.vibrate(18); } catch (_) {}
+      }
 
       // Slice apple if collected
       if (result.slicedAppleIndex >= 0) {
@@ -324,7 +362,7 @@ class Game {
           this.targetBaseY + this.targetRadius,
           20
         );
-        this.particles.spawnFloatingText('+50 🍎', this.targetBaseX, this.knifeImpactY - 40, '#FF334B', 1.2);
+        this.particles.spawnFloatingText('+50 🍎', this.targetBaseX, this.targetBaseY + this.targetRadius + 30, '#FF334B', 1.2);
       }
 
       // Combo System
@@ -442,10 +480,26 @@ class Game {
     // Render Particles (Splinters, Sparks, Shards, Texts)
     this.particles.render(ctx);
 
-    // Render Active Flying Knife
+    // Render Active Flying Knife with motion trail and aerodynamic angle
     if (this.flyingKnife) {
+      // Draw aerodynamic motion trail
+      if (this.flyingKnife.trail && this.flyingKnife.trail.length > 0) {
+        for (const t of this.flyingKnife.trail) {
+          if (t.alpha > 0.05) {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, t.alpha * 0.35);
+            ctx.translate(this.targetBaseX, t.y);
+            ProceduralRenderer.renderKnife(ctx, this.flyingKnife.skinId, this.knifeWidth * 0.85, this.knifeHeight);
+            ctx.restore();
+          }
+        }
+      }
+
       ctx.save();
       ctx.translate(this.targetBaseX, this.flyingKnife.y);
+      // Subtle aerodynamic launch wobble
+      const flightWobble = Math.sin(this.flyingKnife.spinAngle) * 0.025;
+      ctx.rotate(flightWobble);
       ProceduralRenderer.renderKnife(ctx, this.flyingKnife.skinId, this.knifeWidth, this.knifeHeight);
       ctx.restore();
     }
@@ -503,14 +557,14 @@ class Game {
     // 1. Draw Target Disk
     ProceduralRenderer.renderTarget(ctx, this.levelConfig ? this.levelConfig.targetTheme : 'wood', this.targetRadius);
 
-    // 2. Draw Embedded Knives
+    // 2. Draw Embedded Knives - Blade penetrates into target rim, handle points outward
     for (const knife of this.embeddedKnives) {
       ctx.save();
       ctx.rotate(knife.angle);
-      // Position knife protruding outward from target edge
-      ctx.translate(0, this.targetRadius + (this.knifeHeight / 2 - 55));
-      // Flip knife so handle points outward and blade is embedded
-      ctx.rotate(Math.PI);
+      // Position knife protruding outward from target edge:
+      // Tip at (0, -halfH) is embedded 40px into the target rim, handle points outward
+      const embedDepth = 40;
+      ctx.translate(0, this.targetRadius + (this.knifeHeight / 2 - embedDepth));
       ProceduralRenderer.renderKnife(ctx, knife.skinId, this.knifeWidth, this.knifeHeight);
       ctx.restore();
     }

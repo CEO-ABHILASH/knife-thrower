@@ -1,6 +1,7 @@
 /**
- * Polar Angular Collision Engine
- * Eliminates tunneling at high rotation speeds with deterministic angular tolerances.
+ * Polar Angular & Continuous Collision Engine
+ * Eliminates tunneling, enforces strict collision priority (OBSTACLE -> KNIFE -> LOG),
+ * and calculates exact deterministic penetration angles.
  */
 const CollisionEngine = {
   // Normalizes an angle into [0, 2*PI)
@@ -15,20 +16,49 @@ const CollisionEngine = {
     return Math.min(diff, Math.PI * 2 - diff);
   },
 
-  // Computes the local target angle where an upward flying knife lands
-  // Knife impacts at the bottom of the target (screen angle +PI/2)
+  // Computes the exact local angle where an upward flying knife penetrates the target rim.
+  // When drawing with ctx.rotate(angle) then translating outward along Y (0, radius),
+  // the angle corresponding to world bottom (x=0, y=R) is exactly normalizeAngle(-targetRotation).
   getImpactLocalAngle(targetRotation) {
-    return this.normalizeAngle(Math.PI / 2 - targetRotation);
+    return this.normalizeAngle(-targetRotation);
+  },
+
+  // Frame-rate independent Continuous Swept-Segment Penetration Check:
+  // Detects if the blade tip's path from yPrev to yCurrent crossed the target's bottom boundary.
+  checkSweptPenetration(yPrevTip, yCurrentTip, targetSurfaceY, margin = 28) {
+    // Knife travels upward (y decreases: yPrevTip >= yCurrentTip)
+    // Checks if interval [yCurrentTip, yPrevTip] overlaps target boundary with tolerance margin
+    return yPrevTip >= (targetSurfaceY - margin) && yCurrentTip <= (targetSurfaceY + margin);
   },
 
   // Checks collision against all active embedded items on the target
+  // Priority: OBSTACLE -> KNIFE -> APPLE (Slice & Stick) -> LOG (Stick)
   checkCollision(targetRotation, embeddedKnives, obstacles, apples) {
     const impactAngle = this.getImpactLocalAngle(targetRotation);
-    const KNIFE_TOLERANCE = 0.24; // ~13.75 degrees
+    const KNIFE_TOLERANCE = 0.22; // ~12.6 degrees
     const OBSTACLE_TOLERANCE = 0.28; // ~16 degrees
-    const APPLE_TOLERANCE = 0.28; // ~16 degrees
+    const APPLE_TOLERANCE = 0.30; // ~17.2 degrees
 
-    // 1. Check knife-to-knife collision (Game Over)
+    // 1. Check knife-to-obstacle collision FIRST (Iron Spike / Shield / Rock)
+    for (const obs of obstacles) {
+      const delta = this.angularDelta(impactAngle, obs.angle);
+      if (delta < OBSTACLE_TOLERANCE) {
+        let reason = 'KNIFE HIT OBSTACLE';
+        if (obs.type === 'spike') reason = 'KNIFE HIT IRON SPIKE';
+        else if (obs.type === 'shield') reason = 'DEFLECTED BY SHIELD';
+        else if (obs.type === 'rock') reason = 'KNIFE HIT HARD ROCK';
+
+        return {
+          type: 'DEFLECT',
+          obstacleType: obs.type || 'spike',
+          hitItem: obs,
+          reason: reason,
+          impactAngle: impactAngle
+        };
+      }
+    }
+
+    // 2. Check knife-to-knife collision SECOND (Game Over)
     for (const knife of embeddedKnives) {
       const delta = this.angularDelta(impactAngle, knife.angle);
       if (delta < KNIFE_TOLERANCE) {
@@ -41,20 +71,7 @@ const CollisionEngine = {
       }
     }
 
-    // 2. Check knife-to-obstacle collision (Iron Spike / Shield - Game Over)
-    for (const obs of obstacles) {
-      const delta = this.angularDelta(impactAngle, obs.angle);
-      if (delta < OBSTACLE_TOLERANCE) {
-        return {
-          type: 'DEFLECT',
-          hitItem: obs,
-          reason: 'KNIFE HIT IRON SPIKE',
-          impactAngle: impactAngle
-        };
-      }
-    }
-
-    // 3. Check knife-to-apple collection (Bonus reward, knife still embeds!)
+    // 3. Check knife-to-apple collection THIRD (Bonus reward, knife still embeds!)
     let slicedAppleIndex = -1;
     for (let i = 0; i < apples.length; i++) {
       const delta = this.angularDelta(impactAngle, apples[i].angle);
@@ -64,7 +81,7 @@ const CollisionEngine = {
       }
     }
 
-    // 4. Safe embed
+    // 4. Safe embed into Log
     return {
       type: 'STICK',
       impactAngle: impactAngle,
@@ -78,11 +95,11 @@ const CollisionEngine = {
     return {
       x: originX,
       y: originY,
-      vx: dir * (300 + Math.random() * 350),
-      vy: 600 + Math.random() * 300, // bounces downward
+      vx: dir * (320 + Math.random() * 380),
+      vy: 550 + Math.random() * 320, // bounces downward
       rot: 0,
-      vrot: dir * (12 + Math.random() * 16),
-      gravity: 2600
+      vrot: dir * (14 + Math.random() * 18),
+      gravity: 2800
     };
   }
 };

@@ -275,15 +275,18 @@ class ParticleSystem {
       ctx.restore();
     }
 
-    // Render Floating Text
+    // Render Floating Text with stroke outline for contrast against any target
     for (const ft of this.floatingTexts) {
       ctx.save();
       ctx.globalAlpha = Math.max(0, ft.life);
       ctx.font = `900 ${Math.floor(36 * ft.scale)}px 'Outfit', sans-serif`;
-      ctx.fillStyle = ft.color;
       ctx.textAlign = 'center';
       ctx.shadowColor = 'rgba(0,0,0,0.8)';
-      ctx.shadowBlur = 8;
+      ctx.shadowBlur = 10;
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#05070B';
+      ctx.strokeText(ft.text, ft.x, ft.y);
+      ctx.fillStyle = ft.color;
       ctx.fillText(ft.text, ft.x, ft.y);
       ctx.restore();
     }
