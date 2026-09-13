@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="Knife Thrower - High-octane 2D arcade knife throwing game with boss fights, juicy physics, and unlockable skins.">
+  <title>Knife Thrower | Arcade 2D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&family=Cinzel:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="game-container">
+    <!-- Main 9:16 Virtual Canvas (1080x1920 reference) -->
+    <canvas id="game-canvas" width="1080" height="1920"></canvas>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer">
+      <!-- Top HUD -->
+      <header id="top-hud">
+        <div class="hud-box stage-badge">
+          <span class="stage-label" id="hud-stage-label">STAGE 1</span>
+          <div class="stage-dots" id="hud-stage-dots">
+            <span class="dot active"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot boss-dot">★</span>
+          </div>
+        </div>
+
+        <div class="hud-box apples-badge" id="hud-apples-btn" title="Apples collected">
+          <span class="apple-icon">🍎</span>
+          <span id="hud-apple-count">0</span>
+        </div>
+
+        <div class="hud-box score-badge">
+          <span class="score-title">SCORE</span>
+          <span class="score-value" id="hud-score">0</span>
+        </div>
+
+        <div class="hud-actions">
+          <button id="btn-sound" class="icon-btn" aria-label="Toggle Sound" title="Sound Mute/Unmute">
+            <span id="sound-icon">🔊</span>
+          </button>
+          <button id="btn-skins" class="icon-btn" aria-label="Knife Armory" title="Choose Knife Skin">
+            <span>🗡️</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Combo Alert Overlay -->
+      <div id="combo-banner" class="combo-banner hidden">
+        <span id="combo-text">COMBO x2!</span>
+      </div>
+
+      <!-- Knife Ammo Stock (Bottom Left) -->
+      <div id="ammo-container">
+        <div id="ammo-list">
+          <!-- Dynamically populated knife icons -->
+        </div>
+      </div>
+
+      <!-- Boss Warning Banner -->
+      <div id="boss-banner" class="boss-banner hidden">
+        <div class="boss-banner-inner">
+          <div class="boss-warning-tag">⚠️ BOSS ENCOUNTER ⚠️</div>
+          <div class="boss-name" id="boss-banner-name">THE GIANT LEMON</div>
+        </div>
+      </div>
+
+      <!-- Main Menu Screen -->
+      <section id="screen-menu" class="screen overlay-screen">
+        <div class="menu-content glass-card">
+          <div class="logo-container">
+            <div class="logo-sub">ARCADE MASTER</div>
+            <h1 class="game-logo">KNIFE<br><span class="logo-highlight">THROWER</span></h1>
+            <div class="logo-glow"></div>
+          </div>
+
+          <div class="menu-stats">
+            <div class="stat-pill">
+              <span class="stat-lbl">BEST SCORE</span>
+              <span class="stat-val" id="menu-high-score">0</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-lbl">APPLES</span>
+              <span class="stat-val" id="menu-apple-count">🍎 0</span>
+            </div>
+          </div>
+
+          <button id="btn-play" class="btn-primary pulse-glow">
+            <span class="btn-text">PLAY GAME</span>
+            <span class="btn-sub">TAP OR PRESS SPACE</span>
+          </button>
+
+          <button id="btn-open-shop" class="btn-secondary">
+            <span>🗡️ ARMORY & SKINS</span>
+          </button>
+
+          <div class="controls-hint">
+            <span>Controls: Tap / Click / Spacebar to throw knife</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Game Over Screen -->
+      <section id="screen-game-over" class="screen overlay-screen hidden">
+        <div class="game-over-content glass-card">
+          <div class="game-over-header">
+            <div class="defeat-badge">GAME OVER</div>
+            <h2 class="game-over-title" id="game-over-reason">KNIFE DEFLECTED</h2>
+          </div>
+
+          <div class="score-breakdown">
+            <div class="score-card">
+              <span class="card-label">FINAL SCORE</span>
+              <span class="card-value" id="game-over-score">0</span>
+            </div>
+            <div class="score-card highlight">
+              <span class="card-label">BEST RECORD</span>
+              <span class="card-value" id="game-over-best">0</span>
+            </div>
+            <div class="score-card">
+              <span class="card-label">STAGE REACHED</span>
+              <span class="card-value" id="game-over-stage">1</span>
+            </div>
+          </div>
+
+          <button id="btn-retry" class="btn-primary pulse-glow">
+            <span class="btn-text">RETRY</span>
+            <span class="btn-sub">ONE MORE SHOT</span>
+          </button>
+
+          <button id="btn-menu" class="btn-secondary">
+            <span>MAIN MENU</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Armory / Skin Shop Modal -->
+      <div id="modal-skins" class="modal-overlay hidden">
+        <div class="modal-content glass-card">
+          <div class="modal-header">
+            <h2>KNIFE ARMORY</h2>
+            <button id="btn-close-skins" class="close-btn">&times;</button>
+          </div>
+          <div class="modal-wallet">
+            <span>Total Apples: <strong id="shop-apple-count">0</strong> 🍎</span>
+          </div>
+          <div class="skins-grid" id="skins-grid">
+            <!-- Dynamically populated skin cards -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="js/audio.js"></script>
+  <script src="js/levels.js"></script>
+  <script src="js/particles.js"></script>
+  <script src="js/procedural-renderers.js"></script>
+  <script src="js/collision.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
